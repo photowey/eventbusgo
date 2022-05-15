@@ -17,20 +17,49 @@
 package eventbusgo
 
 import (
-	`fmt`
+	"context"
+	"fmt"
+	"os"
+	"runtime"
 	"sync"
+
+	"github.com/photowey/poolgo"
 )
+
+var DefaultGoroutinePoolSize = runtime.NumCPU() << 1
+
+type Option func(bus *EventBus)
+
+type Options struct {
+	executor poolgo.GoroutineExecutor
+	logger   Logger
+}
 
 type EventBus struct {
 	topicNodes map[string]*node
 	lock       sync.RWMutex
+	executor   poolgo.GoroutineExecutor
+	logger     Logger
 }
 
-func NewEventBus() *EventBus {
-	return &EventBus{
+func NewEventBus(opts ...Option) *EventBus {
+	bus := &EventBus{
 		topicNodes: make(map[string]*node),
 		lock:       sync.RWMutex{},
 	}
+
+	for _, opt := range opts {
+		opt(bus)
+	}
+
+	if bus.executor == nil {
+		bus.executor = poolgo.NewGoroutineExecutorPool(DefaultGoroutinePoolSize)
+	}
+	if bus.logger == nil {
+		bus.logger = poolgo.NewLogger(os.Stdout)
+	}
+
+	return bus
 }
 
 func (bus *EventBus) Length(topic string) (int, error) {
@@ -46,7 +75,7 @@ func (bus *EventBus) Length(topic string) (int, error) {
 	}
 }
 
-func (bus *EventBus) Publish(topic string, data any) error {
+func (bus *EventBus) Publish(topic string, data any, ctxs ...context.Context) error {
 	bus.lock.RLock()
 
 	if tn, ok := bus.topicNodes[topic]; ok {
@@ -58,22 +87,48 @@ func (bus *EventBus) Publish(topic string, data any) error {
 		newGroupx := append(makeGroup, tn.subscribers...)
 
 		event := NewEvent(topic, data)
-		go func(data Event, group Group) { // TODO Goroutine pool?
-			for _, sub := range group {
-				sub.onEvent(data)
-			}
-		}(event, newGroupx)
+		// go func(data Event, group Group) { // TODO Goroutine pool?
+		// 	for _, sub := range group {
+		// 		sub.onEvent(data)
+		// 	}
+		// }(event, newGroupx)
 
-		return nil
+		ctx := context.Background()
+		switch len(ctxs) {
+		case 1:
+			ctx = ctxs[0]
+		}
+
+		// FIXME: This is incorrect?
+		// for _, sub := range newGroupx {
+		// 	_ = bus.executor.Execute(func(ctx context.Context) {
+		// 		sub.onEvent(event)
+		// 	}, ctx)
+		// }
+
+		err := bus.executor.Execute(func(ctx context.Context) {
+			for _, sub := range newGroupx {
+				// TODO ignore error?
+				sub.onEvent(event)
+			}
+		}, ctx)
+
+		return err
 	} else {
 		defer bus.lock.RUnlock()
 		return fmt.Errorf("eventbus.Publish: topic:%v not exist", topic)
 	}
 }
 
+// Subscribe - register a channel as Subscriber on given topic
 func (bus *EventBus) Subscribe(topic string, ch channel) {
-	bus.lock.Lock()
 	sub := NewSubscribe(ch)
+	bus.Subscribex(topic, sub)
+}
+
+// Subscribex - register a Subscriber instance on given topic
+func (bus *EventBus) Subscribex(topic string, sub Subscriber) {
+	bus.lock.Lock()
 	if tn, ok := bus.topicNodes[topic]; ok {
 		bus.lock.Unlock()
 		tn.lock.Lock()
@@ -103,5 +158,17 @@ type TopicPublisher func(data any) error
 func (bus *EventBus) PublishFunc(topic string) TopicPublisher {
 	return func(data any) error {
 		return bus.Publish(topic, data)
+	}
+}
+
+func WithExecutor(executor poolgo.GoroutineExecutor) Option {
+	return func(bus *EventBus) {
+		bus.executor = executor
+	}
+}
+
+func WithLogger(logger Logger) Option {
+	return func(bus *EventBus) {
+		bus.logger = logger
 	}
 }

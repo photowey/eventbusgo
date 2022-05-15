@@ -16,29 +16,8 @@
 
 package eventbusgo
 
-import (
-	"github.com/photowey/eventbusgo/nanoid"
-)
-
-type Group []Subscriber
-
-type Subscriber struct {
-	id  string
-	ech channel // event channel
-}
-
-func NewSubscribe(channel chan Event) Subscriber {
-	id, _ := nanoid.New()
-	return Subscriber{
-		id:  id, // Subscriber's identifier
-		ech: channel,
-	}
-}
-
-func (sub *Subscriber) onEvent(event Event) {
-	sub.ech <- event
-}
-
-func (sub *Subscriber) Await() (event Event) {
-	return <-sub.ech
+type Logger interface {
+	Infof(template string, args ...any)
+	Warnf(template string, args ...any)
+	Errorf(template string, args ...any)
 }

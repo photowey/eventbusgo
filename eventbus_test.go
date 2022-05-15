@@ -17,31 +17,22 @@
 package eventbusgo
 
 import (
-	`sync`
-	`testing`
+	"testing"
+	"time"
 )
 
 func TestEventBus_Publish(t *testing.T) {
-	type fields struct {
-		topicNodes map[string]*node
-	}
 	type args struct {
 		topic string
 		data  any
 	}
 	tests := []struct {
 		name    string
-		fields  fields
 		args    args
 		wantErr bool
 	}{
 		{
 			name: "test eventbus publish",
-			fields: fields{
-				topicNodes: map[string]*node{
-					"eventbusgo": newNode(),
-				},
-			},
 			args: args{
 				topic: "eventbusgo",
 				data:  "say hello",
@@ -51,43 +42,55 @@ func TestEventBus_Publish(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			bus := &EventBus{
-				topicNodes: tt.fields.topicNodes,
-				lock:       sync.RWMutex{},
-			}
+			bus := NewEventBus()
 
 			ch := make(chan Event)
+			ch2 := make(chan Event)
 			bus.Subscribe(tt.args.topic, ch)
+			bus.Subscribe(tt.args.topic, ch2)
 
 			if err := bus.Publish(tt.args.topic, tt.args.data); (err != nil) != tt.wantErr {
 				t.Errorf("Publish() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
-			select {
-			case task := <-ch:
-				if tt.args.topic != task.topic {
-					t.Errorf("onEvent() got = %v, want = %v", task.topic, tt.args.topic)
+			go func() {
+				select {
+				case task := <-ch:
+					t.Logf("tests.ch1: receive event: %+v", task)
+
+					if tt.args.topic != task.topic {
+						t.Errorf("onEvent() got = %v, want = %v", task.topic, tt.args.topic)
+					}
+					if tt.args.data != task.data {
+						t.Errorf("onEvent() got = %v, want = %v", task.data, tt.args.data)
+					}
 				}
-				if tt.args.data != task.data {
-					t.Errorf("onEvent() got = %v, want = %v", task.data, tt.args.data)
+			}()
+
+			go func() {
+				select {
+				case task := <-ch2:
+					t.Logf("tests.ch2: receive event: %+v", task)
+					if tt.args.topic != task.topic {
+						t.Errorf("onEvent() got = %v, want = %v", task.topic, tt.args.topic)
+					}
+					if tt.args.data != task.data {
+						t.Errorf("onEvent() got = %v, want = %v", task.data, tt.args.data)
+					}
 				}
-			}
+			}()
+
+			time.Sleep(2 * time.Second)
 		})
 	}
 
 	funcTests := []struct {
 		name    string
-		fields  fields
 		args    args
 		wantErr bool
 	}{
 		{
 			name: "test eventbus publish by topic-publisher",
-			fields: fields{
-				topicNodes: map[string]*node{
-					"topic-publisher": newNode(),
-				},
-			},
 			args: args{
 				topic: "topic-publisher",
 				data:  "say hello -> topic-publisher",
@@ -98,10 +101,7 @@ func TestEventBus_Publish(t *testing.T) {
 
 	for _, tt := range funcTests {
 		t.Run(tt.name, func(t *testing.T) {
-			bus := &EventBus{
-				topicNodes: tt.fields.topicNodes,
-				lock:       sync.RWMutex{},
-			}
+			bus := NewEventBus()
 
 			ch := make(chan Event)
 			bus.Subscribe(tt.args.topic, ch)
@@ -114,6 +114,9 @@ func TestEventBus_Publish(t *testing.T) {
 
 			select {
 			case task := <-ch:
+
+				t.Logf("funcTests:ch1 receive task:%+v", task)
+
 				if tt.args.topic != task.topic {
 					t.Errorf("onEvent() got = %v, want = %v", task.topic, tt.args.topic)
 				}

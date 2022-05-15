@@ -17,12 +17,12 @@
 package nanoid_test
 
 import (
-	`fmt`
-	`regexp`
-	`testing`
-	`unicode`
+	"fmt"
+	"regexp"
+	"testing"
+	"unicode"
 
-	`github.com/photowey/eventbusgo/nanoid`
+	"github.com/photowey/eventbusgo/nanoid"
 )
 
 func TestNew(t *testing.T) {
@@ -126,7 +126,7 @@ func isDigit(src string, len int) bool {
 }
 
 func alphabet(src string, len int) bool {
-	var alpha = regexp.MustCompile(fmt.Sprintf("^[a-z]{%d}$", len))
+	alpha := regexp.MustCompile(fmt.Sprintf("^[a-z]{%d}$", len))
 
 	fmt.Println(alpha.MatchString(src))
 
