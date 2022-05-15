@@ -155,9 +155,9 @@ func (bus *EventBus) UnSubscribe(topic string, sub Subscriber) {
 
 type TopicPublisher func(data any) error
 
-func (bus *EventBus) PublishFunc(topic string) TopicPublisher {
+func (bus *EventBus) PublishFunc(topic string, ctxs ...context.Context) TopicPublisher {
 	return func(data any) error {
-		return bus.Publish(topic, data)
+		return bus.Publish(topic, data, ctxs...)
 	}
 }
 

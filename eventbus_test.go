@@ -17,6 +17,7 @@
 package eventbusgo
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -109,6 +110,12 @@ func TestEventBus_Publish(t *testing.T) {
 			// use PublishFunc -> publisher func
 			publisher := bus.PublishFunc(tt.args.topic) // TopicPublisher
 			if err := publisher(tt.args.data); (err != nil) != tt.wantErr {
+				t.Errorf("Publish() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			ctx := context.Background()
+			publisher2 := bus.PublishFunc(tt.args.topic, ctx) // TopicPublisher
+			if err := publisher2(tt.args.data); (err != nil) != tt.wantErr {
 				t.Errorf("Publish() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
